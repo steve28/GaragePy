@@ -7,6 +7,7 @@ import dht
 import ntptime
 import micropython
 import sys
+import credentials
 
 #allocate emergency byffer to store trace if we die in interrupt handler
 micropython.alloc_emergency_exception_buf(100)
@@ -65,7 +66,7 @@ def do_connect():
     ap.active(False)
     if not wlan.isconnected():
         print('connecting to network...')
-        wlan.connect('Magnum', 'supersecretpassword')
+        wlan.connect(SSID, PASS)
         while not wlan.isconnected():
             pass
     else:
