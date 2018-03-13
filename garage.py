@@ -38,9 +38,9 @@ TOPIC_HUMIDITY = b"garage/humidity"
 ntptime.host = "router.stevesell.com"
 
 # log files
-time_log = open("time.log","a")
 def sync_time(t):
     try:
+        time_log = open("time.log","a")
         print("Syncing clock...", end='')
         t=time()
         ntptime.settime()
@@ -49,7 +49,8 @@ def sync_time(t):
     except Exception as e:
         print('Error:',e)
         sys.print_exception(e, time_log)
-        pass
+    finally:
+        time_log.close()
 
 # set up a timer to call sync_time every hour
 ntp_timer = Timer(-1)
@@ -130,17 +131,17 @@ def main():
                 print("Left door status changed to:", left_contact)
                 prev_left_contact = left_contact
                 if left_contact == 0:
-                    c.publish(TOPIC_LEFT_DOOR_STATUS,b"closed")
+                    c.publish(TOPIC_LEFT_DOOR_STATUS,b"closed", retain=True)
                 elif left_contact == 1:
-                    c.publish(TOPIC_LEFT_DOOR_STATUS,b"open")
+                    c.publish(TOPIC_LEFT_DOOR_STATUS,b"open", retain=True)
 
             if (prev_right_contact != right_contact):
                 print("Right door status changed to:", right_contact)
                 prev_right_contact = right_contact
                 if right_contact == 0:
-                    c.publish(TOPIC_RIGHT_DOOR_STATUS,b"closed")
+                    c.publish(TOPIC_RIGHT_DOOR_STATUS,b"closed", retain=True)
                 elif right_contact == 1:
-                    c.publish(TOPIC_RIGHT_DOOR_STATUS,b"open")
+                    c.publish(TOPIC_RIGHT_DOOR_STATUS,b"open", retain=True)
 
             # update the temperature and humidity if it's different than last time
             # and it has been longer than 5s
@@ -155,10 +156,12 @@ def main():
                     print("OK")
                     temp_bytestring = "{:.1f}".format(temp*1.8+32.0)
                     c.publish(TOPIC_TEMPERATURE,
-                              ustruct.pack('{}s'.format(len(temp_bytestring)),temp_bytestring))
+                              ustruct.pack('{}s'.format(len(temp_bytestring)),temp_bytestring),
+                                           retain=True)
                     prev_humid = humid
                     c.publish(TOPIC_HUMIDITY,
-                              ustruct.pack('{}s'.format(len(str(humid))),str(humid)))
+                              ustruct.pack('{}s'.format(len(str(humid))),str(humid)),
+                              retain=True)
                 except:
                     print("Error")
 
@@ -181,10 +184,3 @@ def main():
         # stop the timer
         print("Stopping clock sync interrupt...")
         ntp_timer.deinit()
-
-        #close the logs
-        print("closing timelog...")
-        time_log.close()
-
-        # reboot
-        #reset()
