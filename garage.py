@@ -1,6 +1,6 @@
 from machine import Pin, reset, Timer
 from time import sleep, ticks_ms, sleep_ms, localtime, time
-from umqtt.simple import MQTTClient
+from umqtt.robust import MQTTClient
 import network
 import ustruct
 import dht
