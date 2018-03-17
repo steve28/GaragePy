@@ -111,9 +111,10 @@ def main():
         # connect to the MQTT server
         c = MQTTClient("garage","192.168.1.8")
         c.set_callback(mqtt_callback)
-        c.connect()
-        c.subscribe(TOPIC_LEFT_DOOR_CMD)
-        c.subscribe(TOPIC_RIGHT_DOOR_CMD)
+        if not c.connect(clean_session=False):
+            print("New session being set up")
+            c.subscribe(TOPIC_LEFT_DOOR_CMD)
+            c.subscribe(TOPIC_RIGHT_DOOR_CMD)
 
         sync_time(1) # sync the clock wiht ntp
 
