@@ -18,21 +18,19 @@ class MQTTClient(simple.MQTTClient):
 
     def reconnect(self):
         i = 0
-        while 1:
+        for i in range(3):
             try:
                 return super().connect(False)
             except OSError as e:
                 self.log(True, e)
-                i += 1
-                self.delay(i)
+                self.delay(2)
 
     def publish(self, topic, msg, retain=False, qos=0):
-        while 1:
-            try:
-                return super().publish(topic, msg, retain, qos)
-            except OSError as e:
-                self.log(False, e)
-            self.reconnect()
+        try:
+            return super().publish(topic, msg, retain, qos)
+        except OSError as e:
+            self.log(False, e)
+        self.reconnect()
 
     def wait_msg(self):
         while 1:
