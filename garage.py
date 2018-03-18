@@ -9,7 +9,7 @@ import micropython
 import sys
 import credentials
 
-#allocate emergency byffer to store trace if we die in interrupt handler
+#allocate emergency buffer to store trace if we die in interrupt handler
 micropython.alloc_emergency_exception_buf(100)
 
 # define the pins
@@ -38,7 +38,7 @@ TOPIC_HUMIDITY = b"garage/humidity"
 
 ntptime.host = "router.stevesell.com"
 
-# log files
+
 def sync_time(t):
     try:
         time_log = open("time.log","a")
@@ -53,9 +53,6 @@ def sync_time(t):
     finally:
         time_log.close()
 
-# set up a timer to call sync_time every hour
-ntp_timer = Timer(-1)
-ntp_timer.init(period=1000*3600, mode=Timer.PERIODIC, callback=sync_time)
 
 def do_connect():
     # Get wlan
@@ -66,7 +63,7 @@ def do_connect():
     ap.active(False)
     if not wlan.isconnected():
         print('connecting to network...')
-        wlan.connect(SSID, PASS)
+        wlan.connect(credentials.SSID, credentials.PASS)
         while not wlan.isconnected():
             pass
     else:
@@ -100,85 +97,83 @@ def mqtt_callback(topic, payload):
         prev_left_contact = -1
         prev_right_contact = -1
 
+def contact_check(t):
+    global prev_left_contact, prev_right_contact
+
+    left_contact = pin_left_contact.value()
+    right_contact = pin_right_contact.value()
+
+    if (prev_left_contact != left_contact):
+        prev_left_contact = left_contact
+        if left_contact == 0:
+            c.publish(TOPIC_LEFT_DOOR_STATUS,b"closed", retain=True)
+        elif left_contact == 1:
+            c.publish(TOPIC_LEFT_DOOR_STATUS,b"open", retain=True)
+
+    if (prev_right_contact != right_contact):
+        prev_right_contact = right_contact
+        if right_contact == 0:
+            c.publish(TOPIC_RIGHT_DOOR_STATUS,b"closed", retain=True)
+        elif right_contact == 1:
+            c.publish(TOPIC_RIGHT_DOOR_STATUS,b"open", retain=True)
+
+def check_dht22(t):
+    try:
+        print("Checking DHT22...", end='')
+        th_sens.measure()
+        temp =  th_sens.temperature()
+        humid = th_sens.humidity()
+        print("OK")
+        temp_bytestring = "{:.1f}".format(temp*1.8+32.0)
+        c.publish(TOPIC_TEMPERATURE,
+                  ustruct.pack('{}s'.format(len(temp_bytestring)),temp_bytestring),
+                               retain=True)
+        prev_humid = humid
+        c.publish(TOPIC_HUMIDITY,
+                  ustruct.pack('{}s'.format(len(str(humid))),str(humid)),
+                  retain=True)
+    except:
+        print("Error")
+
+
+# set up a timer to call sync_time every hour
+ntp_timer = Timer(-1)
+ntp_timer.init(period=1000*3600, mode=Timer.PERIODIC, callback=sync_time)
+dht22_timer = Timer(-1)
+dht22_timer.init(period=1000*60, mode=Timer.PERIODIC, callback=check_dht22)
+door_check = Timer(-1)
+door_check.init(period=100, mode=Timer.PERIODIC, callback=contact_check)
+
+do_connect()
+
+# connect to the MQTT server
+c = MQTTClient("garage","192.168.1.8")
+c.DEBUG=True
+c.set_callback(mqtt_callback)
+if not c.connect(clean_session=False):
+    print("New session being set up")
+    c.subscribe(TOPIC_LEFT_DOOR_CMD)
+    c.subscribe(TOPIC_RIGHT_DOOR_CMD)
+
+sync_time(1) # sync the clock wiht ntp
+
+
 def main():
-    # globals
-    global prev_left_contact, prev_right_contact, last_check
+
 
     try:
-        # connect to the WLAN
-        do_connect()
-
-        # connect to the MQTT server
-        c = MQTTClient("garage","192.168.1.8")
-        c.set_callback(mqtt_callback)
-        if not c.connect(clean_session=False):
-            print("New session being set up")
-            c.subscribe(TOPIC_LEFT_DOOR_CMD)
-            c.subscribe(TOPIC_RIGHT_DOOR_CMD)
-
-        sync_time(1) # sync the clock wiht ntp
-
-        # setup a periodic timer to sync time with NTP try every 4 hrs
-        #ntp_timer = Timer(-1)
-        #ntp_timer.init(period=1000*3600*4, mode=Timer.PERIODIC, callback=sync_time)
-
         # main loop
+        print("Entering main loop.  Waiting for something to happen.")
         while True:
-            # Check the state of the doors
-            left_contact = pin_left_contact.value()
-            right_contact = pin_right_contact.value()
-
-            # Update them if necessary
-            if (prev_left_contact != left_contact):
-                print("Left door status changed to:", left_contact)
-                prev_left_contact = left_contact
-                if left_contact == 0:
-                    c.publish(TOPIC_LEFT_DOOR_STATUS,b"closed", retain=True)
-                elif left_contact == 1:
-                    c.publish(TOPIC_LEFT_DOOR_STATUS,b"open", retain=True)
-
-            if (prev_right_contact != right_contact):
-                print("Right door status changed to:", right_contact)
-                prev_right_contact = right_contact
-                if right_contact == 0:
-                    c.publish(TOPIC_RIGHT_DOOR_STATUS,b"closed", retain=True)
-                elif right_contact == 1:
-                    c.publish(TOPIC_RIGHT_DOOR_STATUS,b"open", retain=True)
-
-            # update the temperature and humidity if it's different than last time
-            # and it has been longer than 5s
-            now = ticks_ms()
-            if now-last_check > 60000:
-                print("Checking DHT22...",end='')
-                last_check = now
-                try:
-                    th_sens.measure()
-                    temp =  th_sens.temperature()
-                    humid = th_sens.humidity()
-                    print("OK")
-                    temp_bytestring = "{:.1f}".format(temp*1.8+32.0)
-                    c.publish(TOPIC_TEMPERATURE,
-                              ustruct.pack('{}s'.format(len(temp_bytestring)),temp_bytestring),
-                                           retain=True)
-                    prev_humid = humid
-                    c.publish(TOPIC_HUMIDITY,
-                              ustruct.pack('{}s'.format(len(str(humid))),str(humid)),
-                              retain=True)
-                except:
-                    print("Error")
-
             # Check for incoming MQTT messages
-            c.check_msg()
-
-            # take a break
-            sleep_ms(100)
+            c.wait_msg()
 
     except KeyboardInterrupt:
         print("Cntrl-C pressed!")
     except Exception as e:
         print("I died!")
         # log the error in a file so it's there later
-        filename="crash_{}-{:02d}-{:02d}-{:02d}:{:02d}:{:02d}Z".format(*localtime())
+        filename="crash_{}-{:02d}-{:02d}-{:02d}{:02d}{:02d}Z".format(*localtime())
         print(filename)
         with open(filename,"w") as ed:
             sys.print_exception(e, ed)
@@ -186,3 +181,4 @@ def main():
         # stop the timer
         print("Stopping clock sync interrupt...")
         ntp_timer.deinit()
+        dht22_timer.deinit()
