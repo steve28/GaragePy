@@ -41,18 +41,19 @@ ntptime.host = "router.stevesell.com"
 
 def sync_time(t):
     try:
-        time_log = open("time.log","a")
+        #time_log = open("time.log","a")
         print("Syncing clock...", end='')
         t=time()
         ntptime.settime()
-        print("{}: {} s correction".format(t,time()-t), file=time_log)
+        #print("{}: {} s correction".format(t,time()-t), file=time_log)
+        print("{}: {} s correction".format(t,time()-t))
         print('Done')
     except Exception as e:
         print('Error:',e)
-        sys.print_exception(e, time_log)
+        #sys.print_exception(e, time_log)
     finally:
-        time_log.close()
-
+        #time_log.close()
+        pass
 
 def do_connect():
     # Get wlan
@@ -136,11 +137,16 @@ def check_dht22(t):
         print("Error")
 
 
-# set up a timer to call sync_time every hour
+# sync the clock every 4 hours (ESP8266 needs to do this at least every 7h due
+# to clock counter rollover)
 ntp_timer = Timer(-1)
-ntp_timer.init(period=1000*3600, mode=Timer.PERIODIC, callback=sync_time)
+ntp_timer.init(period=1000*3600*4, mode=Timer.PERIODIC, callback=sync_time)
+
+# get temp and humidity every 5 min
 dht22_timer = Timer(-1)
-dht22_timer.init(period=1000*60, mode=Timer.PERIODIC, callback=check_dht22)
+dht22_timer.init(period=1000*300, mode=Timer.PERIODIC, callback=check_dht22)
+
+# check the door status every 100 ms
 door_check = Timer(-1)
 door_check.init(period=100, mode=Timer.PERIODIC, callback=contact_check)
 
